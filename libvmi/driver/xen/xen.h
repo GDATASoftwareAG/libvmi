@@ -69,11 +69,11 @@ struct hvm_hw_cpu_xsave_412 {
 status_t xen_init(
     vmi_instance_t vmi,
     uint32_t init_flags,
-    vmi_init_data_t *init_data);
+    const vmi_init_data_t *init_data);
 status_t xen_init_vmi(
     vmi_instance_t vmi,
     uint32_t init_flags,
-    vmi_init_data_t *init_data);
+    const vmi_init_data_t *init_data);
 status_t xen_domainwatch_init(
     vmi_instance_t vmi,
     uint32_t init_flags);
@@ -162,7 +162,7 @@ status_t xen_test(
     uint64_t domainid,
     const char *name,
     uint64_t init_flags,
-    void* init_data);
+    const void* init_data);
 status_t xen_pause_vm(
     vmi_instance_t vmi);
 status_t xen_resume_vm(

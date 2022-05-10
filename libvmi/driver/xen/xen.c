@@ -701,7 +701,7 @@ status_t
 xen_init(
     vmi_instance_t vmi,
     uint32_t UNUSED(init_flags),
-    vmi_init_data_t *UNUSED(init_data))
+    const vmi_init_data_t *UNUSED(init_data))
 {
     if ( xen_get_instance(vmi) )
         return VMI_SUCCESS;
@@ -738,7 +738,7 @@ status_t
 xen_init_vmi(
     vmi_instance_t vmi,
     uint32_t init_flags,
-    vmi_init_data_t *init_data)
+    const vmi_init_data_t *init_data)
 {
     status_t ret = VMI_FAILURE;
     xen_instance_t *xen = xen_get_instance(vmi);
@@ -2849,7 +2849,7 @@ xen_test(
     uint64_t domainid,
     const char *name,
     uint64_t UNUSED(init_flags),
-    void* UNUSED(init_data))
+    const void* UNUSED(init_data))
 {
     struct vmi_instance _vmi = {0};
     vmi_instance_t vmi = &_vmi;

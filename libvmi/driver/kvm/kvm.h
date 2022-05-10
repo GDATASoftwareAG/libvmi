@@ -31,12 +31,12 @@
 status_t kvm_init(
     vmi_instance_t vmi,
     uint32_t init_flags,
-    vmi_init_data_t *init_data);
+    const vmi_init_data_t *init_data);
 
 status_t kvm_init_vmi(
     vmi_instance_t vmi,
     uint32_t init_flags,
-    vmi_init_data_t *init_data);
+    const vmi_init_data_t *init_data);
 
 void kvm_destroy(
     vmi_instance_t vmi);

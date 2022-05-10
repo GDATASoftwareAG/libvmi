@@ -59,7 +59,7 @@
 status_t xen_init_events(
     vmi_instance_t vmi,
     uint32_t init_flags,
-    vmi_init_data_t *init_data);
+    const vmi_init_data_t *init_data);
 status_t xen_domainwatch_init_events(
     vmi_instance_t vmi,
     uint32_t init_flags);

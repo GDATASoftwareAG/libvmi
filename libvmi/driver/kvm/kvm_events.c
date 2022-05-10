@@ -737,7 +737,7 @@ status_t
 kvm_events_init(
     vmi_instance_t vmi,
     uint32_t init_flags,
-    vmi_init_data_t *init_data)
+    const vmi_init_data_t *init_data)
 {
     (void)init_flags;
     (void)init_data;

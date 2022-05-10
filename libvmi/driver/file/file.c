@@ -116,7 +116,7 @@ status_t
 file_init(
     vmi_instance_t vmi,
     uint32_t UNUSED(init_flags),
-    vmi_init_data_t *UNUSED(init_data))
+    const vmi_init_data_t *UNUSED(init_data))
 {
     vmi->driver.driver_data = g_try_malloc0(sizeof(file_instance_t));
     return VMI_SUCCESS;
@@ -126,7 +126,7 @@ status_t
 file_init_vmi(
     vmi_instance_t vmi,
     uint32_t UNUSED(init_flags),
-    vmi_init_data_t *UNUSED(init_data))
+    const vmi_init_data_t *UNUSED(init_data))
 {
     file_instance_t *fi = file_get_instance(vmi);
     FILE *fhandle = NULL;
@@ -293,7 +293,7 @@ file_test(
     uint64_t UNUSED(id),
     const char *name,
     uint64_t UNUSED(init_flags),
-    vmi_init_data_t* UNUSED(init_data))
+    const vmi_init_data_t* UNUSED(init_data))
 {
     status_t ret = VMI_FAILURE;
     FILE *f = NULL;

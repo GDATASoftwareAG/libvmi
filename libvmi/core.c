@@ -463,7 +463,7 @@ vmi_get_access_mode(
     vmi_instance_t vmi,
     const void *domain,
     uint64_t init_flags,
-    vmi_init_data_t *init_data,
+    const vmi_init_data_t *init_data,
     vmi_mode_t *mode)
 {
     if ( vmi ) {
@@ -521,7 +521,7 @@ status_t vmi_init(
     vmi_mode_t mode,
     const void *domain,
     uint64_t init_flags,
-    vmi_init_data_t *init_data,
+    const vmi_init_data_t *init_data,
     vmi_init_error_t *error)
 {
     if ( VMI_FAILURE == driver_sanity_check(mode) ) {
@@ -674,7 +674,7 @@ page_mode_t vmi_init_paging(
     return vmi->page_mode;
 }
 
-GHashTable *init_config(vmi_instance_t vmi, vmi_config_t config_mode, void *config, vmi_init_error_t *error)
+GHashTable *init_config(vmi_instance_t vmi, vmi_config_t config_mode, const void *config, vmi_init_error_t *error)
 {
     GHashTable *_config = NULL;
 
@@ -706,6 +706,7 @@ GHashTable *init_config(vmi_instance_t vmi, vmi_config_t config_mode, void *conf
 
                 return NULL;
             }
+            // TODO: Deep copy
             _config = (GHashTable*)config;
             break;
 #ifdef ENABLE_JSON_PROFILES
@@ -752,7 +753,7 @@ os_t vmi_init_profile(
 os_t vmi_init_os(
     vmi_instance_t vmi,
     vmi_config_t config_mode,
-    void *config,
+    const void *config,
     vmi_init_error_t *error)
 {
     if (!vmi)
@@ -839,9 +840,9 @@ vmi_init_complete(
     vmi_instance_t *vmi,
     const void *domain,
     uint64_t init_flags,
-    vmi_init_data_t *init_data,
+    const vmi_init_data_t *init_data,
     vmi_config_t config_mode,
-    void *config,
+    const void *config,
     vmi_init_error_t *error)
 {
     vmi_instance_t _vmi = NULL;

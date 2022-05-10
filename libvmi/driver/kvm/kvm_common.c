@@ -180,7 +180,7 @@ kvm_test(
     uint64_t domainid,
     const char *name,
     uint64_t UNUSED(init_flags),
-    vmi_init_data_t* UNUSED(init_data))
+    const vmi_init_data_t* UNUSED(init_data))
 {
     struct vmi_instance _vmi = {0};
     vmi_instance_t vmi = &_vmi;

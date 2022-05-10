@@ -866,7 +866,7 @@ status_t vmi_init(
     vmi_mode_t mode,
     const void *domain,
     uint64_t init_flags,
-    vmi_init_data_t *init_data,
+    const vmi_init_data_t *init_data,
     vmi_init_error_t *error) NOEXCEPT;
 
 /**
@@ -902,9 +902,9 @@ status_t vmi_init_complete(
     vmi_instance_t *vmi,
     const void *domain,
     uint64_t init_flags,
-    vmi_init_data_t *init_data,
+    const vmi_init_data_t *init_data,
     vmi_config_t config_mode,
-    void *config,
+    const void *config,
     vmi_init_error_t *error) NOEXCEPT;
 
 /**
@@ -941,7 +941,7 @@ page_mode_t vmi_init_paging(
 os_t vmi_init_os(
     vmi_instance_t vmi,
     vmi_config_t config_mode,
-    void *config,
+    const void *config,
     vmi_init_error_t *error) NOEXCEPT;
 
 /**
@@ -2142,7 +2142,7 @@ status_t vmi_get_access_mode(
     vmi_instance_t vmi,
     const void *domain,
     uint64_t init_flags,
-    vmi_init_data_t *init_data,
+    const vmi_init_data_t *init_data,
     vmi_mode_t *mode) NOEXCEPT;
 
 /**
