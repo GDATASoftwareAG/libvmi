@@ -316,7 +316,11 @@ process_register(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
     // the reply value will override the existing one
     rpl.cr.new_val = libvmi_event->reg_event.value;
 
-    return process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+    status_t result = process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+
+    libvmi_event->x86_regs = NULL;
+
+    return result;
 }
 
 static status_t
@@ -398,7 +402,11 @@ process_msr(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
     // the reply value will override the existing one
     rpl.msr.new_val = libvmi_event->reg_event.value;
 
-    return process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+    status_t result = process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+
+    libvmi_event->x86_regs = NULL;
+
+    return result;
 }
 
 static status_t
@@ -460,7 +468,11 @@ process_interrupt(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
     if (libvmi_event->interrupt_event.reinject)
         rpl.common.action = KVMI_EVENT_ACTION_CONTINUE;
 
-    return process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+    status_t result = process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+
+    libvmi_event->x86_regs = NULL;
+
+    return result;
 }
 
 static status_t
@@ -472,6 +484,7 @@ process_pagefault(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
 #endif
     dbprint(VMI_DEBUG_KVM, "--Received pagefault event\n");
 
+    status_t result = VMI_FAILURE;
     vmi_event_t *libvmi_event = NULL;
     // reply struct
     struct kvm_event_pf_reply_packet rpl = {
@@ -522,14 +535,15 @@ process_pagefault(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
 
             // handle emulation reply requests
             if (VMI_FAILURE == process_cb_response_emulate(vmi, response, libvmi_event, &rpl))
-                return VMI_FAILURE;
+                goto cleanup;
 
             // set reply action
             rpl.hdr.vcpu = kvmi_event->event.common.vcpu;
             rpl.common.event = kvmi_event->event.common.event;
             rpl.common.action = KVMI_EVENT_ACTION_CONTINUE;
 
-            return process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+            result = process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+            goto cleanup;
         }
     }
     //  generic ?
@@ -561,7 +575,7 @@ process_pagefault(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
 
                 // handle emulation reply requests
                 if (VMI_FAILURE == process_cb_response_emulate(vmi, response, libvmi_event, &rpl))
-                    return VMI_FAILURE;
+                    goto cleanup;
 
                 // set reply action
                 rpl.hdr.vcpu = kvmi_event->event.common.vcpu;
@@ -570,18 +584,24 @@ process_pagefault(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
 
                 if (VMI_FAILURE ==
                         process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl)))
-                    return VMI_FAILURE;
+                    goto cleanup;
 
                 cb_issued = 1;
             }
         }
-        if ( cb_issued )
-            return VMI_SUCCESS;
+        if (cb_issued) {
+            result = VMI_SUCCESS;
+            goto cleanup;
+        }
     }
 
     errprint("%s: Caught a memory event that had no handler registered in LibVMI @ GFN 0x%" PRIx64 " (0x%" PRIx64 "), access: %u\n",
              __func__, gfn, (addr_t)kvmi_event->event.page_fault.gpa, out_access);
-    return VMI_FAILURE;
+cleanup:
+    if (libvmi_event) {
+        libvmi_event->x86_regs = NULL;
+    }
+    return result;
 }
 
 static status_t
@@ -595,6 +615,7 @@ process_descriptor(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
 #endif
     dbprint(VMI_DEBUG_KVM, "--Received descriptor event\n");
 
+    status_t result = VMI_FAILURE;
     vmi_event_t *libvmi_event = vmi->descriptor_access_event;
     // reply struct
     struct {
@@ -638,14 +659,18 @@ process_descriptor(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
             break;
         default:
             errprint("Unexpected descriptor ID %d\n", kvmi_event->event.desc.descriptor);
-            return VMI_FAILURE;
+            goto cleanup;
     }
     libvmi_event->descriptor_event.is_write = kvmi_event->event.desc.write;
 
     // call user callback
     event_response_t response = call_event_callback(vmi, libvmi_event);
 
-    return process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+    result = process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+
+cleanup:
+    libvmi_event->x86_regs = NULL;
+    return result;
 }
 
 static status_t
@@ -718,7 +743,11 @@ process_singlestep(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
     // call user callback
     event_response_t response = call_event_callback(vmi, libvmi_event);
 
-    return process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+    status_t result = process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+
+    libvmi_event->x86_regs = NULL;
+
+    return result;
 }
 
 static status_t
@@ -773,7 +802,11 @@ process_cpuid(vmi_instance_t vmi, struct kvmi_dom_event *kvmi_event)
     // call user callback
     event_response_t response = call_event_callback(vmi, libvmi_event);
 
-    return process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+    status_t result = process_cb_response(vmi, response, libvmi_event, kvmi_event, &rpl, sizeof(rpl));
+
+    libvmi_event->x86_regs = NULL;
+
+    return result;
 }
 
 
