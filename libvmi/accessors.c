@@ -759,6 +759,23 @@ GSList* vmi_get_va_pages(vmi_instance_t vmi, addr_t dtb)
     return vmi->arch_interface.get_pages[vmi->page_mode](vmi, 0, 0, dtb);
 }
 
+status_t vmi_get_va_pages_2(vmi_instance_t vmi, addr_t dtb, custom_fn_t fn)
+{
+#ifdef ENABLE_SAFETY_CHECKS
+    if (!vmi)
+        return VMI_FAILURE;
+
+    if (!vmi->arch_interface.get_pages_2[vmi->page_mode]) {
+        dbprint(VMI_DEBUG_PTLOOKUP, "Invalid or not supported paging mode during get_va_pages\n");
+        return VMI_FAILURE;
+    }
+#endif
+
+    vmi->arch_interface.get_pages_2[vmi->page_mode](vmi, 0, 0, dtb, fn);
+
+    return VMI_SUCCESS;
+}
+
 GSList* vmi_get_nested_va_pages(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t pt, page_mode_t pm)
 {
 #ifdef ENABLE_SAFETY_CHECKS

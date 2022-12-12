@@ -407,3 +407,144 @@ done:
 
     return ret;
 }
+
+void get_pages_ia32e_2(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t dtb, custom_fn_t fn)
+{
+    uint8_t entry_size = 0x8;
+
+#define IA32E_ENTRIES_PER_PAGE 0x200 // 0x1000/0x8
+
+    uint64_t *pml4_page = g_malloc(VMI_PS_4KB);
+    uint64_t *pdpt_page = g_try_malloc0(VMI_PS_4KB);
+    uint64_t *pgd_page = g_try_malloc0(VMI_PS_4KB);
+    uint64_t *pt_page = g_try_malloc0(VMI_PS_4KB);
+
+    if ( !pml4_page || !pdpt_page || !pgd_page || !pt_page )
+        goto done;
+
+    addr_t pml4e_location = dtb & VMI_BIT_MASK(12,51);
+
+    ACCESS_CONTEXT(ctx,
+                   .npt = npt,
+                   .npm = npm);
+
+    ctx.addr = pml4e_location;
+    if (VMI_FAILURE == vmi_read(vmi, &ctx, VMI_PS_4KB, pml4_page, NULL))
+        goto done;
+
+    uint64_t pml4e_index;
+    for (pml4e_index = 0; pml4e_index < IA32E_ENTRIES_PER_PAGE; pml4e_index++, pml4e_location += entry_size) {
+
+        uint64_t pml4e_value = pml4_page[pml4e_index];
+
+        if (!ENTRY_PRESENT(vmi->x86.transition_pages, pml4e_value)) {
+            continue;
+        }
+
+        uint64_t pdpte_location = pml4e_value & VMI_BIT_MASK(12,51);
+
+        ctx.addr = pdpte_location;
+        if (VMI_FAILURE == vmi_read(vmi, &ctx, VMI_PS_4KB, pdpt_page, NULL))
+            goto done;
+
+        uint64_t pdpte_index;
+        for (pdpte_index = 0; pdpte_index < IA32E_ENTRIES_PER_PAGE; pdpte_index++, pdpte_location += entry_size) {
+
+            uint64_t pdpte_value = pdpt_page[pdpte_index];
+
+            if (!ENTRY_PRESENT(vmi->x86.transition_pages, pdpte_value)) {
+                continue;
+            }
+
+            if (PAGE_SIZE(pdpte_value)) {
+                page_info_t info;
+
+                info.vaddr = canonical_addr((pml4e_index << 39) | (pdpte_index << 30));
+                info.pt = dtb;
+                info.paddr = get_gigpage_ia32e(info.vaddr, pdpte_value);
+                info.size = VMI_PS_1GB;
+                info.x86_ia32e.pml4e_location = pml4e_location;
+                info.x86_ia32e.pml4e_value = pml4e_value;
+                info.x86_ia32e.pdpte_location = pdpte_location;
+                info.x86_ia32e.pdpte_value = pdpte_value;
+
+                fn(&info);
+
+                continue;
+            }
+
+            uint64_t pgd_location = pdpte_value & VMI_BIT_MASK(12,51);
+
+            ctx.addr = pgd_location;
+            if (VMI_FAILURE == vmi_read(vmi, &ctx, VMI_PS_4KB, pgd_page, NULL))
+                goto done;
+
+            uint64_t pgde_index;
+            for (pgde_index = 0; pgde_index < IA32E_ENTRIES_PER_PAGE; pgde_index++, pgd_location += entry_size) {
+
+                uint64_t pgd_value = pgd_page[pgde_index];
+
+                if (ENTRY_PRESENT(vmi->os_type == VMI_OS_WINDOWS, pgd_value)) {
+
+                    if (PAGE_SIZE(pgd_value)) {
+                        page_info_t info;
+
+                        info.vaddr = canonical_addr((pml4e_index << 39) | (pdpte_index << 30) |
+                                                    (pgde_index << 21));
+                        info.pt = dtb;
+                        info.paddr = get_2megpage_ia32e(info.vaddr, pgd_value);
+                        info.size = VMI_PS_2MB;
+                        info.x86_ia32e.pml4e_location = pml4e_location;
+                        info.x86_ia32e.pml4e_value = pml4e_value;
+                        info.x86_ia32e.pdpte_location = pdpte_location;
+                        info.x86_ia32e.pdpte_value = pdpte_value;
+                        info.x86_ia32e.pgd_location = pgd_location;
+                        info.x86_ia32e.pgd_value = pgd_value;
+
+                        fn(&info);
+
+                        continue;
+                    }
+
+                    uint64_t pte_location = (pgd_value & VMI_BIT_MASK(12,51));
+                    ctx.addr = pte_location;
+                    if (VMI_FAILURE == vmi_read(vmi, &ctx, VMI_PS_4KB, pt_page, NULL))
+                        goto done;
+
+                    uint64_t pte_index;
+                    for (pte_index = 0; pte_index < IA32E_ENTRIES_PER_PAGE; pte_index++, pte_location += entry_size) {
+                        uint64_t pte_value = pt_page[pte_index];
+
+                        if (ENTRY_PRESENT(vmi->os_type == VMI_OS_WINDOWS, pte_value)) {
+                            page_info_t info;
+
+                            info.vaddr = canonical_addr((pml4e_index << 39) | (pdpte_index << 30) |
+                                                        (pgde_index << 21) | (pte_index << 12));
+                            info.pt = dtb;
+                            info.paddr = get_paddr_ia32e(info.vaddr, pte_value);
+                            info.size = VMI_PS_4KB;
+                            info.x86_ia32e.pml4e_location = pml4e_location;
+                            info.x86_ia32e.pml4e_value = pml4e_value;
+                            info.x86_ia32e.pdpte_location = pdpte_location;
+                            info.x86_ia32e.pdpte_value = pdpte_value;
+                            info.x86_ia32e.pgd_location = pgd_location;
+                            info.x86_ia32e.pgd_value = pgd_value;
+                            info.x86_ia32e.pte_location = pte_location;
+                            info.x86_ia32e.pte_value = pte_value;
+
+                            fn(&info);
+
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    done:
+    g_free(pt_page);
+    g_free(pgd_page);
+    g_free(pdpt_page);
+    g_free(pml4_page);
+}

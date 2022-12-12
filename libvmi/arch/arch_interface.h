@@ -35,10 +35,17 @@ typedef GSList* (*arch_get_pages_t)
  addr_t npt,
  page_mode_t npm,
  addr_t dtb);
+typedef void (*arch_get_pages_2_t)
+        (vmi_instance_t vmi,
+         addr_t npt,
+         page_mode_t npm,
+         addr_t dtb,
+         custom_fn_t fn);
 
 typedef struct arch_interface {
     arch_lookup_t lookup[VMI_PM_EPT_5L + 1];
     arch_get_pages_t get_pages[VMI_PM_EPT_5L + 1];
+    arch_get_pages_2_t get_pages_2[VMI_PM_EPT_5L + 1];
 } arch_interface_t;
 
 status_t get_vcpu_page_mode(vmi_instance_t vmi, unsigned long vcpu, page_mode_t *out_pm);

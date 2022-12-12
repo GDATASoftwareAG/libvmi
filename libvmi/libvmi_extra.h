@@ -41,19 +41,34 @@ extern "C" {
 
 #pragma GCC visibility push(default)
 
-#ifdef LIBVMI_EXTRA_GLIB
+typedef void(*custom_fn_t(page_info_t* info));
 
 /**
  * Retrieve the pages mapped into the address space of a process.
  * @param[in] vmi Instance
- * @param[in] pt The pagetable the process (aka. dtb)
+ * @param[in] dtb The pagetable the process (aka. dtb)
  *
  * @return GSList of page_info_t structures, or NULL on error.
  * The caller is responsible for freeing the list and the structs.
  */
+status_t vmi_get_va_pages_2(
+        vmi_instance_t vmi,
+        addr_t dtb,
+        custom_fn_t fn) NOEXCEPT;
+
+#ifdef LIBVMI_EXTRA_GLIB
+
+/**
+* Retrieve the pages mapped into the address space of a process.
+* @param[in] vmi Instance
+* @param[in] pt The pagetable the process (aka. dtb)
+*
+* @return GSList of page_info_t structures, or NULL on error.
+* The caller is responsible for freeing the list and the structs.
+*/
 GSList* vmi_get_va_pages(
-    vmi_instance_t vmi,
-    addr_t pt) NOEXCEPT;
+        vmi_instance_t vmi,
+        addr_t pt) NOEXCEPT;
 
 /**
  * Retrieve the pages mapped into the address space of a process.

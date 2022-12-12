@@ -29,5 +29,6 @@
 
 status_t v2p_ia32e (vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t pt, addr_t vaddr, page_info_t *info);
 GSList* get_pages_ia32e(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t dtb);
+void get_pages_ia32e_2(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t dtb, custom_fn_t fn);
 
 #endif
