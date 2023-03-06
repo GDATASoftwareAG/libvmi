@@ -25,8 +25,6 @@
  */
 
 #include <string.h>
-#include <wchar.h>
-#include <errno.h>
 
 #include "private.h"
 #include "driver/driver_wrapper.h"
@@ -53,6 +51,7 @@ vmi_mmap_guest(
     size_t buf_offset = 0;
     unsigned long *pfns = NULL;
     unsigned int pfn_ndx = 0, i;
+    void **driver_access_ptrs = NULL;
 
     switch (ctx->translate_mechanism) {
         case VMI_TM_KERNEL_SYMBOL:
@@ -107,8 +106,6 @@ vmi_mmap_guest(
                 paddr = naddr;
 
             pfns[pfn_ndx] = paddr >> vmi->page_shift;
-            // store relative offsets to the appropriate pages
-            access_ptrs[i] = (void *)((addr_t)pfn_ndx * vmi->page_size);
             ++pfn_ndx;
         } else {
             // missing page, mapping failed
@@ -118,21 +115,24 @@ vmi_mmap_guest(
         buf_offset += vmi->page_size;
     }
 
-    void *base_ptr = NULL;
     // do mmap only if there are pages available for mapping
     if (pfn_ndx != 0) {
-        base_ptr = (char *) driver_mmap_guest(vmi, pfns, pfn_ndx);
+        driver_access_ptrs = malloc(pfn_ndx * sizeof(void*));
+        if (!driver_access_ptrs) {
+            dbprint(VMI_DEBUG_READ, "--unable to allocate buffer");
+            goto done;
+        }
 
-        if (MAP_FAILED == base_ptr || NULL == base_ptr) {
+        if (driver_mmap_guest(vmi, pfns, pfn_ndx, driver_access_ptrs) != VMI_SUCCESS) {
             dbprint(VMI_DEBUG_READ, "--failed to mmap guest memory");
             goto done;
         }
     }
 
+    unsigned int driver_access_ptrs_idx = 0;
     for (i = 0; i < num_pages; i++) {
         if (access_ptrs[i] != (void *)-1) {
-            // add buffer base pointer to the relative offsets since now we know its value
-            access_ptrs[i] += (addr_t)base_ptr;
+            access_ptrs[i] = driver_access_ptrs[driver_access_ptrs_idx++];
         } else {
             access_ptrs[i] = NULL;
         }
@@ -145,7 +145,189 @@ done:
         free(pfns);
     }
 
+    if (driver_access_ptrs) {
+        free(driver_access_ptrs);
+    }
+
     return ret;
+}
+
+static size_t
+determine_contiguous_region(vmi_instance_t vmi, GSList *region_start, addr_t *pfns, size_t max_remaining_pages,
+                            GSList **region_end)
+{
+    size_t pfn_idx = 0;
+
+    for (GSList *elem = region_start, *prev_elem = region_start; elem != NULL; prev_elem = elem, elem = elem->next, (*region_end) = elem) {
+        page_info_t *prev_elem_info = (page_info_t *) prev_elem->data;
+        page_info_t *cur_elem_info = (page_info_t *) elem->data;
+        // Break if we encounter the end of a contiguous region
+        if (cur_elem_info->vaddr - prev_elem_info->vaddr > prev_elem_info->size) {
+            (*region_end) = prev_elem;
+            break;
+        }
+
+        // Add pfns to pfn array. Split large pages into 4kb pages while also making sure that we don't overshoot
+        // by splitting a whole large page although the requested range ends somewhere within that page.
+        for (size_t i = 0; i < cur_elem_info->size / vmi->page_size && pfn_idx < max_remaining_pages; i++) {
+            pfns[pfn_idx++] = (cur_elem_info->paddr >> vmi->page_shift) + i;
+        }
+    }
+
+    return pfn_idx;
+}
+
+status_t
+vmi_mmap_guest_2(
+    vmi_instance_t vmi,
+    const access_context_t *ctx,
+    size_t num_pages,
+    mapped_regions_t **mapped_regions)
+{
+    status_t ret = VMI_FAILURE;
+    addr_t dtb = ctx->dtb;
+    addr_t addr = ctx->addr;
+    addr_t npt = ctx->npt;
+    page_mode_t pm = ctx->pm;
+    page_mode_t npm = ctx->npm;
+    addr_t *pfns = NULL;
+    mapped_regions_t* result = NULL;
+
+    switch (ctx->translate_mechanism) {
+        case VMI_TM_KERNEL_SYMBOL:
+#ifdef ENABLE_SAFETY_CHECKS
+            if (!vmi->os_interface || !vmi->kpgd)
+                return VMI_FAILURE;
+#endif
+            if ( VMI_FAILURE == vmi_translate_ksym2v(vmi, ctx->ksym, &addr) )
+                return VMI_FAILURE;
+
+            if (!pm)
+                pm = vmi->page_mode;
+
+            dtb = vmi->kpgd;
+
+            break;
+        case VMI_TM_PROCESS_PID:
+#ifdef ENABLE_SAFETY_CHECKS
+            if (!vmi->os_interface)
+                return VMI_FAILURE;
+#endif
+
+            if ( !ctx->pid )
+                dtb = vmi->kpgd;
+            else if (ctx->pid > 0) {
+                if ( VMI_FAILURE == vmi_pid_to_dtb(vmi, ctx->pid, &dtb) )
+                    return VMI_FAILURE;
+            }
+
+            if (!pm)
+                pm = vmi->page_mode;
+            if (!dtb)
+                return VMI_FAILURE;
+            break;
+        case VMI_TM_PROCESS_DTB:
+            if (!pm)
+                pm = vmi->page_mode;
+            break;
+        default:
+            errprint("%s error: translation mechanism is not defined or unsupported.\n", __FUNCTION__);
+            return VMI_FAILURE;
+    }
+
+    GSList *va_pages = vmi_get_nested_va_pages_subset(vmi, npt, npm, dtb, pm, addr, addr + num_pages * vmi->page_size);
+    if (!va_pages) {
+        return VMI_SUCCESS;
+    }
+
+    pfns = malloc(num_pages * sizeof(unsigned long));
+    if (!pfns) {
+        goto done;
+    }
+
+    size_t result_capacity = 8;
+    result = malloc(sizeof(mapped_regions_t) + result_capacity * sizeof(mapped_region_t));
+    if (!result) {
+        goto done;
+    }
+    result->size = 0;
+
+    va_pages = g_slist_reverse(va_pages);
+
+    for (GSList* elem = va_pages; elem != NULL;) {
+        mapped_region_t cur_region = {0};
+        cur_region.start_va = ((page_info_t *) elem->data)->vaddr;
+
+        // determine the next region of contiguous virtual addresses and retrieve their respective pfns
+        size_t num_pfns = determine_contiguous_region(vmi, elem, pfns, num_pages, &elem);
+        num_pages -= num_pfns;
+
+        cur_region.access_ptrs = malloc(num_pfns * sizeof(void*));
+        if (!cur_region.access_ptrs) {
+            goto done;
+        }
+        cur_region.num_pages = num_pfns;
+
+        if (driver_mmap_guest(vmi, pfns, num_pfns, cur_region.access_ptrs) != VMI_SUCCESS) {
+            dbprint(VMI_DEBUG_READ, "--failed to mmap guest memory");
+            free(cur_region.access_ptrs);
+            goto done;
+        }
+
+        // resize array if necessary
+        if (result->size >= result_capacity) {
+            result_capacity *= 2;
+            void *temp = realloc(result, sizeof(mapped_regions_t) + sizeof(mapped_region_t) * result_capacity);
+
+            if (!temp) {
+                dbprint(VMI_DEBUG_READ, "--unable to resize result array");
+                free(cur_region.access_ptrs);
+                goto done;
+            }
+
+            result = temp;
+        }
+
+        // add current memory region
+        result->regions[result->size++] = cur_region;
+    }
+
+    // reduce the capacity of the array to the actual number of elements in order to not waste memory
+    void *temp = realloc(result, sizeof(mapped_regions_t) + sizeof(mapped_region_t) * result->size);
+
+    if (!temp) {
+        goto done;
+    }
+
+    result = temp;
+
+    (*mapped_regions) = result;
+    ret = VMI_SUCCESS;
+
+done:
+    if (va_pages) {
+        g_slist_free(va_pages);
+    }
+
+    if (pfns) {
+        free(pfns);
+    }
+
+    if (ret != VMI_SUCCESS) {
+        vmi_free_mapped_regions(result);
+    }
+
+    return ret;
+}
+
+void vmi_free_mapped_regions(mapped_regions_t *mapping)
+{
+    if (mapping) {
+        for (size_t i = 0; i < mapping->size; i++) {
+            free(mapping->regions[i].access_ptrs);
+        }
+        free(mapping);
+    }
 }
 
 status_t

@@ -723,6 +723,20 @@ typedef struct page_info {
 } page_info_t;
 
 /**
+ * Struct for holding information about a contiguous region of mapped pages
+ */
+typedef struct mapped_region {
+    addr_t start_va;
+    size_t num_pages;
+    void** access_ptrs;
+} mapped_region_t;
+
+typedef struct mapped_regions {
+    size_t size;
+    mapped_region_t regions[];
+} mapped_regions_t;
+
+/**
  * Supported architectures by LibVMI
  */
 typedef enum arch {
@@ -1381,6 +1395,39 @@ status_t vmi_mmap_guest(
     size_t num_pages,
     void **access_ptrs
 ) NOEXCEPT;
+
+/**
+ * Maps num_pages of the guest's virtual memory into the host, starting at the provided virtual address.
+ * Writes the result into a dynamically sized array consisting of mapped_region structs.
+ * A mapped_region describes a chunk of contiguous virtual memory.
+ * Each mapped_region holds an array of pointers that allow access to the mapped pages of such a region.
+ * Remember to call munmap() on each array item afterwards.
+ * The caller is responsible for freeing the array via vmi_free_mapped_regions().
+ *
+ * This function performs a lot better than vmi_mmap_guest() if a large, sparsely mapped memory region is requested.
+ * Results between this function and vmi_mmap_guest() may vary since multiple consecutive entries pointing to the same
+ * physical address are skipped.
+ *
+ * @param[in] vmi LibVMI instance
+ * @param[in] ctx Access context
+ * @param[in] num_pages Number of guest pages to be mapped (starting from ctx.addr)
+ * @param[out] mapped_regions
+ * @return VMI_SUCCESS if mapping succeeds, VMI_FAILURE otherwise
+ */
+status_t
+vmi_mmap_guest_2(
+    vmi_instance_t vmi,
+    const access_context_t *ctx,
+    size_t num_pages,
+    mapped_regions_t **mapped_regions
+) NOEXCEPT;
+
+/**
+ * Frees a mapped_regions array.
+ *
+ * @param[in] mapping
+ */
+void vmi_free_mapped_regions(mapped_regions_t *mapping) NOEXCEPT;
 
 /**
  * Reads count bytes from memory located at the physical address paddr

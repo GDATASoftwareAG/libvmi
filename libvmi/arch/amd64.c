@@ -253,19 +253,22 @@ bool is_duplicate(vmi_instance_t vmi, uint64_t *page, uint64_t index)
     return vmi->os_type == VMI_OS_WINDOWS && index > 0 && page[index] == page[index - 1];
 }
 
-GSList* get_pages_ia32e(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t dtb)
+GSList *get_pages_ia32e_ext(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t dtb, addr_t start, addr_t end)
 {
 
     GSList *ret = NULL;
     uint8_t entry_size = 0x8;
-
-#define IA32E_ENTRIES_PER_PAGE 0x200 // 0x1000/0x8
 
     uint max_bit_pfn = 51;
     // On newer versions of Windows, some higher bits of the pfn value
     // are used as flags for transition pages.
     if (vmi->os_type == VMI_OS_WINDOWS) {
         max_bit_pfn = 44;
+    }
+
+    if (start > end) {
+        dbprint(VMI_DEBUG_PTLOOKUP, "--PTLookup: start address > end address. start: 0x%"PRIx64", end: 0x%"PRIx64, start, end);
+        return ret;
     }
 
     uint64_t *pml4_page = g_malloc(VMI_PS_4KB);
@@ -287,7 +290,7 @@ GSList* get_pages_ia32e(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t 
         goto done;
 
     uint64_t pml4e_index;
-    for (pml4e_index = 0; pml4e_index < IA32E_ENTRIES_PER_PAGE; pml4e_index++, pml4e_location += entry_size) {
+    for (pml4e_index = get_pml4_index(start) / 8; pml4e_index <= get_pml4_index(end) / 8; pml4e_index++, pml4e_location += entry_size) {
 
         uint64_t pml4e_value = pml4_page[pml4e_index];
 
@@ -302,7 +305,7 @@ GSList* get_pages_ia32e(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t 
             goto done;
 
         uint64_t pdpte_index;
-        for (pdpte_index = 0; pdpte_index < IA32E_ENTRIES_PER_PAGE; pdpte_index++, pdpte_location += entry_size) {
+        for (pdpte_index = get_pdpt_index_ia32e(start) / 8; pdpte_index <= get_pdpt_index_ia32e(end) / 8; pdpte_index++, pdpte_location += entry_size) {
 
             uint64_t pdpte_value = pdpt_page[pdpte_index];
 
@@ -334,7 +337,7 @@ GSList* get_pages_ia32e(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t 
                 goto done;
 
             uint64_t pgde_index;
-            for (pgde_index = 0; pgde_index < IA32E_ENTRIES_PER_PAGE; pgde_index++, pgd_location += entry_size) {
+            for (pgde_index = get_pd_index_ia32e(start) / 8; pgde_index <= get_pd_index_ia32e(end) / 8; pgde_index++, pgd_location += entry_size) {
 
                 uint64_t pgd_value = pgd_page[pgde_index];
 
@@ -367,7 +370,7 @@ GSList* get_pages_ia32e(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t 
                         goto done;
 
                     uint64_t pte_index;
-                    for (pte_index = 0; pte_index < IA32E_ENTRIES_PER_PAGE; pte_index++, pte_location += entry_size) {
+                    for (pte_index = get_pt_index_ia32e(start) / 8; pte_index <= get_pt_index_ia32e(end) / 8; pte_index++, pte_location += entry_size) {
                         uint64_t pte_value = pt_page[pte_index];
 
                         if (ENTRY_PRESENT(vmi->os_type == VMI_OS_WINDOWS, pte_value) &&
@@ -406,4 +409,9 @@ done:
     g_free(pml4_page);
 
     return ret;
+}
+
+GSList *get_pages_ia32e(vmi_instance_t vmi, addr_t npt, page_mode_t npm, addr_t dtb)
+{
+    return get_pages_ia32e_ext(vmi, npt, npm, dtb, 0, 0xFFFFFFFFFFFFFFFF);
 }

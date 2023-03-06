@@ -2813,14 +2813,26 @@ xen_read_page(
     return memory_cache_insert(vmi, paddr);
 }
 
-void *
+status_t
 xen_mmap_guest(
     vmi_instance_t vmi,
     unsigned long *pfns,
-    unsigned int size)
+    unsigned int size,
+    void **access_ptrs)
 {
     xen_instance_t *xen = xen_get_instance(vmi);
-    return xen->libxcw.xc_map_foreign_pages(xen->xchandle, xen->domainid, PROT_READ, pfns, size);
+    void *base_ptr = xen->libxcw.xc_map_foreign_pages(xen->xchandle, xen->domainid, PROT_READ, pfns, size);
+
+    if (MAP_FAILED == base_ptr || NULL == base_ptr) {
+        dbprint(VMI_DEBUG_XEN, "--xen_mmap_guest: failed to mmap guest memory");
+        return VMI_FAILURE;
+    }
+
+    for (unsigned long i = 0; i < size; i++) {
+        access_ptrs[i] = (void *) ((addr_t) base_ptr + i * vmi->page_size);
+    }
+
+    return VMI_SUCCESS;
 }
 
 status_t
