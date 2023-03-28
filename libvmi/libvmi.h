@@ -1315,7 +1315,7 @@ char *vmi_read_str(
  * @param[in] ctx Access context
  * @return String read from memory or NULL on error
  */
-char *vmi_read_w_str(
+unicode_string_t *vmi_read_w_str(
     vmi_instance_t vmi,
     const access_context_t *ctx) NOEXCEPT;
 

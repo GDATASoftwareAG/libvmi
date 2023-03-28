@@ -659,6 +659,76 @@ vmi_read_str(
     return ret;
 }
 
+<<<<<<< HEAD
+=======
+unicode_string_t
+*vmi_read_w_str(
+        vmi_instance_t vmi,
+        const access_context_t *ctx)
+{
+    access_context_t _ctx = *ctx;
+    uint16_t *buf = NULL;
+    size_t buf_capacity = 0;
+    size_t wstring_len = 0;
+    uint16_t *partial_buf = NULL;
+    size_t read_size = VMI_PS_4KB / 4;
+    size_t bytes_read;
+    bool read_more = true;
+
+    do {
+        buf_capacity += read_size;
+        void *_buf = realloc(buf, buf_capacity);
+        if (!_buf)
+        {
+            return NULL;
+        }
+
+        buf = _buf;
+
+        partial_buf = &buf[wstring_len];
+
+        if (VMI_FAILURE == vmi_read(vmi, &_ctx, read_size, partial_buf, &bytes_read) &&
+            !bytes_read)
+        {
+            free(buf);
+            return NULL;
+        }
+
+        if (bytes_read != read_size)
+        {
+            read_more = false;
+        }
+
+        // Search for null character
+        while (wstring_len < bytes_read / sizeof(uint16_t))
+        {
+            if (partial_buf[wstring_len++] == '\0')
+            {
+                read_more = false;
+                break;
+            }
+        }
+
+        _ctx.addr += read_size;
+    } while (read_more);
+
+
+    buf = realloc(buf, wstring_len * 2);
+
+    unicode_string_t *unicodeStruct = g_try_malloc0(sizeof(unicode_string_t));
+    if ( !unicodeStruct )
+    {
+        free(buf);
+        return NULL;
+    }
+    unicodeStruct->length = wstring_len;
+    unicodeStruct->encoding = "UTF-16";
+    unicodeStruct->contents = (uint8_t*) buf;
+
+    return unicodeStruct;
+}
+
+>>>>>>> 7b49f9d8 (Add read_w_str without conversion)
 unicode_string_t*
 vmi_read_unicode_str(
     vmi_instance_t vmi,
