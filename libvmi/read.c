@@ -659,8 +659,6 @@ vmi_read_str(
     return ret;
 }
 
-<<<<<<< HEAD
-=======
 unicode_string_t
 *vmi_read_w_str(
         vmi_instance_t vmi,
@@ -712,7 +710,6 @@ unicode_string_t
         _ctx.addr += read_size;
     } while (read_more);
 
-
     buf = realloc(buf, wstring_len * 2);
 
     unicode_string_t *unicodeStruct = g_try_malloc0(sizeof(unicode_string_t));
@@ -728,7 +725,6 @@ unicode_string_t
     return unicodeStruct;
 }
 
->>>>>>> 7b49f9d8 (Add read_w_str without conversion)
 unicode_string_t*
 vmi_read_unicode_str(
     vmi_instance_t vmi,
