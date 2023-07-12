@@ -34,26 +34,13 @@ set(VMI_PUBLIC_HEADERS
 # list of external dependencies, used by libtool for the static library
 set(VMI_PUBLIC_DEPS "")
 
-# create libvmi.so
-add_library (vmi_shared SHARED $<TARGET_OBJECTS:vmi>)
+
 # one libvmi_extra.h function returns a GSList*
-target_link_libraries(vmi_shared PUBLIC ${GLIB_LIBRARIES})
+target_link_libraries(vmi PUBLIC ${GLIB_LIBRARIES})
 list(APPEND VMI_PUBLIC_DEPS ${GLIB_LIBRARIES})
-set_target_properties(vmi_shared PROPERTIES OUTPUT_NAME "vmi")
-# set soname
-set_target_properties(vmi_shared PROPERTIES
-    VERSION
-    0.${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
-    SOVERSION 0
-)
-if (ENABLE_STATIC)
-    # create libvmi.a
-    add_library (vmi_static STATIC $<TARGET_OBJECTS:vmi>)
-    set_target_properties(vmi_static PROPERTIES OUTPUT_NAME "vmi")
-endif ()
 
 if (ZLIB_FOUND)
-    target_link_libraries(vmi_shared PUBLIC ${ZLIB_LIBRARIES})
+    target_link_libraries(vmi PUBLIC ${ZLIB_LIBRARIES})
     list(APPEND VMI_PUBLIC_DEPS ${ZLIB_LIBRARIES})
 endif ()
 
@@ -112,7 +99,7 @@ if (ENABLE_CONFIGFILE)
         # compile with -fPIC to allow static linking
         set_target_properties(config_parser PROPERTIES COMPILE_FLAGS "-Wno-error -fPIC")
         # link with main libvmi library
-        target_link_libraries(vmi_shared PRIVATE config_parser)
+        target_link_libraries(vmi PRIVATE config_parser)
     endif ()
 endif ()
 
@@ -125,7 +112,7 @@ if (ENABLE_KVM)
     else ()
         if (ENABLE_KVM_LEGACY)
             # legacy KVM driver
-            target_link_libraries(vmi_shared PRIVATE m)
+            target_link_libraries(vmi PRIVATE m)
             find_package(JSON-C)
             set_package_properties(JSON-C PROPERTIES
                 PURPOSE "Dependency for KVM driver")
@@ -143,13 +130,13 @@ if (ENABLE_KVM)
                 message(WARNING "Cannot find libkvmi: disabling KVM driver")
             else ()
                 message("Found libkvmi headers: ${Libkvmi_INCLUDE_DIRS}")
-                target_include_directories(vmi_shared PRIVATE ${Libkvmi_INCLUDE_DIRS})
+                target_include_directories(vmi PRIVATE ${Libkvmi_INCLUDE_DIRS})
             endif ()
         endif ()
-        target_include_directories(vmi_shared PUBLIC ${JSON-C_INCLUDE_DIRS})
+        target_include_directories(vmi PUBLIC ${JSON-C_INCLUDE_DIRS})
         # CMAKE_DL_LIBS -> dlopen* lib
-        target_link_libraries(vmi_shared PRIVATE ${CMAKE_DL_LIBS})
-        target_link_libraries(vmi_shared PUBLIC ${JSON-C_LIBRARIES})
+        target_link_libraries(vmi PRIVATE ${CMAKE_DL_LIBS})
+        target_link_libraries(vmi PUBLIC ${JSON-C_LIBRARIES})
         list(APPEND VMI_PUBLIC_HEADERS events.h)
         list(APPEND VMI_PUBLIC_DEPS ${CMAKE_DL_LIBS} ${JSON-C_LIBRARIES})
     endif ()
@@ -164,8 +151,8 @@ if (ENABLE_BAREFLANK)
         set(ENABLE_BAREFLANK OFF CACHE BOOL "Build Bareflank driver" FORCE)
         message(WARNING "Cannot find JSON: disabling Bareflank driver")
     else ()
-        target_include_directories(vmi_shared PUBLIC ${JSON-C_INCLUDE_DIRS})
-        target_link_libraries(vmi_shared PUBLIC ${JSON-C_LIBRARIES})
+        target_include_directories(vmi PUBLIC ${JSON-C_INCLUDE_DIRS})
+        target_link_libraries(vmi PUBLIC ${JSON-C_LIBRARIES})
         list(APPEND VMI_PUBLIC_DEPS ${JSON-C_LIBRARIES})
     endif ()
 endif ()
@@ -178,7 +165,7 @@ if (ENABLE_XEN)
     find_package(Xen REQUIRED)
     list(APPEND VMI_PUBLIC_HEADERS events.h)
     # CMAKE_DL_LIBS -> dlopen* lib
-    target_link_libraries(vmi_shared PRIVATE ${CMAKE_DL_LIBS})
+    target_link_libraries(vmi PUBLIC ${CMAKE_DL_LIBS})
     list(APPEND VMI_PUBLIC_DEPS ${CMAKE_DL_LIBS})
 endif ()
 
@@ -187,7 +174,7 @@ if (ENABLE_WINDOWS)
 endif ()
 
 if (ENABLE_ADDRESS_CACHE)
-    target_sources(vmi_shared PRIVATE cache.c)
+    target_sources(vmi PRIVATE cache.c)
 endif ()
 
 if (REKALL_PROFILES OR VOLATILITY_IST)
@@ -201,17 +188,35 @@ if (REKALL_PROFILES OR VOLATILITY_IST)
         message(WARNING "Cannot find JSON: disabling Rekall profiles and Volatility IST")
     else ()
         set(ENABLE_JSON_PROFILES ON)
-        target_sources(vmi_shared PRIVATE json_profiles/json_profiles.c)
+        target_sources(vmi PRIVATE json_profiles/json_profiles.c)
         if (REKALL_PROFILES)
-            target_sources(vmi_shared PRIVATE json_profiles/rekall.c)
+            target_sources(vmi PRIVATE json_profiles/rekall.c)
         endif ()
         if (VOLATILITY_IST)
-            target_sources(vmi_shared PRIVATE json_profiles/volatility_ist.c)
+            target_sources(vmi PRIVATE json_profiles/volatility_ist.c)
         endif ()
-        target_include_directories(vmi_shared PUBLIC ${JSON-C_INCLUDE_DIRS})
-        target_link_libraries(vmi_shared PUBLIC ${JSON-C_LIBRARIES})
+        target_include_directories(vmi PUBLIC ${JSON-C_INCLUDE_DIRS})
+        target_link_libraries(vmi PUBLIC ${JSON-C_LIBRARIES})
         list(APPEND VMI_PUBLIC_DEPS ${JSON-C_LIBRARIES})
     endif ()
+endif ()
+
+
+# create libvmi.so
+add_library (vmi_shared SHARED)
+target_link_libraries(vmi_shared vmi)
+set_target_properties(vmi_shared PROPERTIES OUTPUT_NAME "vmi")
+# set soname
+set_target_properties(vmi_shared PROPERTIES
+        VERSION
+        0.${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+        SOVERSION 0
+        )
+if (ENABLE_STATIC)
+    # create libvmi.a
+    add_library (vmi_static STATIC)
+    target_link_libraries(vmi_static vmi)
+    set_target_properties(vmi_static PROPERTIES OUTPUT_NAME "vmi")
 endif ()
 
 install(TARGETS vmi_shared DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR})
