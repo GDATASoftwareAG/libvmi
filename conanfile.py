@@ -20,6 +20,11 @@ class Libvmi(ConanFile):
     def requirements(self):
         self.requires("glib/2.76.3")
         self.requires("json-c/0.16")
+        self.requires("zlib/1.2.13")
+
+    def configure(self):
+        if self.options.shared:
+            self.options.rm_safe("fPIC")
 
     def layout(self):
         cmake_layout(self)
